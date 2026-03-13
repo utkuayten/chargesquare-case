@@ -168,12 +168,11 @@ def _worker(
     except KeyboardInterrupt:
         pass
 
-    # Ignore further signals during cleanup so flush() isn't interrupted
+    # Ignore further SIGINT but keep SIGTERM so main process can kill us
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
-    # Graceful shutdown — flush pending messages
-    remaining = producer.flush(timeout=5)
+    # Graceful shutdown — flush pending messages (short timeout so we exit fast)
+    remaining = producer.flush(timeout=2)
     if remaining:
         log.warning("Worker-%d: %d messages not flushed on shutdown.", worker_id, remaining)
     log.info("Worker-%d stopped. Total sent: %s", worker_id, f"{sent:,}")
@@ -224,13 +223,8 @@ def run_producer(
     ]
 
     def _handle_signal(_sig, _frame):
-        if shutdown.is_set():
-            log.info("Force kill — terminating immediately.")
-            for p in processes:
-                p.terminate()
-            os._exit(1)
-        log.info("Signal received — initiating shutdown…")
         shutdown.set()
+        os._exit(0)
 
     signal.signal(signal.SIGINT,  _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
@@ -238,20 +232,18 @@ def run_producer(
     for p in processes:
         p.start()
 
-    if duration_seconds:
-        time.sleep(duration_seconds)
-        shutdown.set()
-    else:
-        # Poll with a timeout so Python can service SIGINT between waits
-        try:
-            while not shutdown.is_set():
-                shutdown.wait(timeout=0.5)
-        except KeyboardInterrupt:
-            shutdown.set()
+    try:
+        if duration_seconds:
+            deadline = time.monotonic() + duration_seconds
+            while time.monotonic() < deadline:
+                time.sleep(0.2)
+        else:
+            while True:
+                time.sleep(0.2)
+    except (KeyboardInterrupt, SystemExit):
+        pass
 
-    for p in processes:
-        p.terminate()
-
+    shutdown.set()
     log.info("All producer workers stopped.")
     os._exit(0)
 

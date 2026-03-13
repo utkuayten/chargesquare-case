@@ -66,7 +66,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from clickhouse_driver import Client as CH
-from confluent_kafka import Consumer, TopicPartition, OFFSET_BEGINNING
+from confluent_kafka import Consumer, TopicPartition, OFFSET_BEGINNING, OFFSET_END
 
 from config.settings import CLICKHOUSE, KAFKA
 from consumers.validator import DeadLetterWriter, validate
@@ -224,7 +224,7 @@ def run(
     consumer = Consumer({
         "bootstrap.servers":      bootstrap_servers,
         "group.id":               group_id,
-        "auto.offset.reset":      "earliest",
+        "auto.offset.reset":      "latest",
         "enable.auto.commit":     True,
         "auto.commit.interval.ms":5000,
         "fetch.min.bytes":        65_536,
@@ -233,11 +233,11 @@ def run(
     })
     meta = consumer.list_topics(KAFKA.topic_charging_events, timeout=10)
     partitions = [
-        TopicPartition(KAFKA.topic_charging_events, p, OFFSET_BEGINNING)
+        TopicPartition(KAFKA.topic_charging_events, p, OFFSET_END)
         for p in meta.topics[KAFKA.topic_charging_events].partitions
     ]
     consumer.assign(partitions)
-    log.info("Assigned %d partitions for topic %s", len(partitions), KAFKA.topic_charging_events)
+    log.info("Assigned %d partitions (from latest) for topic %s", len(partitions), KAFKA.topic_charging_events)
 
     writer      = BatchWriter()
     dead_letter = DeadLetterWriter()
