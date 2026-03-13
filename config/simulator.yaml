@@ -1,0 +1,40 @@
+# ChargeSquare Simulator Configuration
+# ──────────────────────────────────────────────────────────────────────────────
+# All values can also be overridden via environment variables
+# (see config/settings.py for the mapping).
+
+simulator:
+
+  # ── Station topology ─────────────────────────────────────────────────────
+  stations:
+    networks:               10      # number of CPO networks
+    per_network:            100     # stations per network  (total = 1 000)
+    connectors_per_station: 4       # connectors per station (1–4)
+    fault_rate_pct:         0.3     # % chance a station emits FAULT_ALERT
+                                    # per 1 000 events (controls background noise)
+
+  # ── Session lifecycle ─────────────────────────────────────────────────────
+  session:
+    duration_minutes:
+      min: 10
+      max: 120
+    meter_updates:                  # consecutive METER_UPDATEs between START and STOP
+      min: 3
+      max: 15
+    soc_start_pct: [5,  50]         # [min, max] initial SoC at session start
+    soc_end_pct:   [60, 100]        # [min, max] final SoC at session stop
+
+  # ── Traffic shaping ───────────────────────────────────────────────────────
+  traffic:
+    peak_hours:                     # UTC hour ranges with elevated session rate
+      - [7,  9]                     # morning rush
+      - [17, 20]                    # evening rush
+    peak_multiplier:  3.0           # session-start rate is 3× during peak hours
+    session_fraction: 0.08          # fraction of off-peak events that open a new session
+                                    # (each session generates ~10 events, so ~0.8 % of
+                                    #  raw events trigger a full lifecycle)
+
+  # ── Producer knobs ────────────────────────────────────────────────────────
+  producer:
+    target_eps:   10000             # total events/sec across all workers
+    num_workers:  4                 # parallel producer processes
