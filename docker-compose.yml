@@ -113,6 +113,26 @@ services:
       start_period: 30s
 
   # ─────────────────────────────────────────────────────────
+  # App — shared image for producer, consumers, analytics, tests
+  # ─────────────────────────────────────────────────────────
+  app:
+    build: .
+    image: chargesquare-app
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - REDIS_HOST=redis
+      - CLICKHOUSE_HOST=clickhouse
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    profiles:
+      - tools   # won't auto-start with make up
+
+  # ─────────────────────────────────────────────────────────
   # Kafka UI — web console for topic inspection
   # ─────────────────────────────────────────────────────────
   kafka-ui:

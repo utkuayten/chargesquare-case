@@ -1,5 +1,7 @@
-.PHONY: help install up down logs status producer producer-fast producer-max \
-        consumer-redis consumer-ch pipeline dashboard report benchmark test
+.PHONY: help build up down logs status producer producer-fast producer-max \
+        consumer-redis consumer-ch pipeline dashboard report benchmark backfill test
+
+RUN = docker-compose run --rm app
 
 # ─────────────────────────────────────────────────────────
 help:
@@ -8,7 +10,8 @@ help:
 	@echo "  ──────────────────────────────────────────"
 	@echo ""
 	@echo "  Infrastructure"
-	@echo "    make up              Start Kafka, Redis, ClickHouse, Kafka-UI"
+	@echo "    make build           Build the app Docker image"
+	@echo "    make up              Start all services (Kafka, Redis, ClickHouse, Grafana)"
 	@echo "    make down            Stop and remove all containers + volumes"
 	@echo "    make logs            Stream all service logs"
 	@echo "    make status          Show container health status"
@@ -30,15 +33,13 @@ help:
 	@echo "    make backfill        Inject 24 h of historical data (all time periods)"
 	@echo ""
 	@echo "  Dev"
-	@echo "    make install         Install Python dependencies"
 	@echo "    make test            Run unit tests"
 	@echo ""
 
 # ─────────────────────────────────────────────────────────
-install:
-	pip install -r requirements.txt
+build:
+	docker-compose build app
 
-# ─────────────────────────────────────────────────────────
 up:
 	docker-compose up -d
 	@echo "Waiting for services to become healthy..."
@@ -56,43 +57,43 @@ status:
 
 # ─────────────────────────────────────────────────────────
 producer:
-	python -m simulator.producer --eps 10000 --workers 4
+	$(RUN) python -m simulator.producer --eps 10000 --workers 4
 
 producer-fast:
-	python -m simulator.producer --eps 50000 --workers 8
+	$(RUN) python -m simulator.producer --eps 50000 --workers 8
 
 producer-max:
-	python -m simulator.producer --eps 100000 --workers 16
+	$(RUN) python -m simulator.producer --eps 100000 --workers 16
 
 # ─────────────────────────────────────────────────────────
 consumer-redis:
-	python -m consumers.redis_consumer
+	$(RUN) python -m consumers.redis_consumer
 
 consumer-ch:
-	python -m consumers.clickhouse_consumer
+	$(RUN) python -m consumers.clickhouse_consumer
 
 pipeline:
 	@echo "Starting consumers in background..."
-	nohup python -m consumers.redis_consumer > /tmp/redis_consumer.log 2>&1 &
-	nohup python -m consumers.clickhouse_consumer > /tmp/ch_consumer.log 2>&1 &
-	@echo "Consumers started (logs: /tmp/redis_consumer.log, /tmp/ch_consumer.log)"
+	docker-compose run -d --rm --name cs-redis-consumer app python -m consumers.redis_consumer
+	docker-compose run -d --rm --name cs-ch-consumer    app python -m consumers.clickhouse_consumer
+	@echo "Consumers started. Logs: docker logs cs-redis-consumer / cs-ch-consumer"
 
 # ─────────────────────────────────────────────────────────
 dashboard:
-	python -m analytics.dashboard --mode dashboard
+	$(RUN) python -m analytics.dashboard --mode dashboard
 
 report:
-	python -m analytics.dashboard --mode report
+	$(RUN) python -m analytics.dashboard --mode report
 
 benchmark:
-	python scripts/benchmark.py
+	$(RUN) python scripts/benchmark.py
 
 backfill:
-	python scripts/backfill.py
+	$(RUN) python scripts/backfill.py
 
 backfill-direct:
-	python scripts/backfill_direct.py
+	$(RUN) python scripts/backfill_direct.py
 
 # ─────────────────────────────────────────────────────────
 test:
-	python -m pytest tests/ -v --tb=short
+	$(RUN) python -m pytest tests/ -v --tb=short
