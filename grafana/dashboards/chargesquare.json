@@ -1,0 +1,210 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_CLICKHOUSE",
+      "label": "ClickHouse",
+      "type": "datasource",
+      "pluginId": "grafana-clickhouse-datasource"
+    }
+  ],
+  "title": "ChargeSquare — EV Charging Analytics",
+  "uid": "chargesquare-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "tags": ["chargesquare", "ev", "charging"],
+  "panels": [
+
+    {
+      "id": 1,
+      "title": "Total Sessions",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT count() FROM chargesquare.charging_events WHERE event_type = 'session_stop'",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "auto" },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "blue" }, "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } }
+    },
+
+    {
+      "id": 2,
+      "title": "Total Revenue",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT round(sum(revenue_eur), 2) FROM chargesquare.charging_events WHERE event_type = 'session_stop'",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "green" }, "unit": "currencyEUR", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } }
+    },
+
+    {
+      "id": 3,
+      "title": "Total Energy Delivered",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT round(sum(energy_kwh), 1) FROM chargesquare.charging_events WHERE event_type = 'session_stop'",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "yellow" }, "unit": "kwh", "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] } } }
+    },
+
+    {
+      "id": 4,
+      "title": "Fault Rate",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT round(countIf(event_type = 'fault_alert') * 100.0 / count(), 3) FROM chargesquare.charging_events",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "percent", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "red", "value": 1 }] } } }
+    },
+
+    {
+      "id": 5,
+      "title": "Sessions & Revenue per Hour",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 9 },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+          "rawSql": "SELECT toStartOfHour(timestamp) AS time, count() AS sessions FROM chargesquare.charging_events WHERE event_type = 'session_stop' AND timestamp >= now() - INTERVAL 24 HOUR GROUP BY time ORDER BY time",
+          "refId": "Sessions"
+        },
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+          "rawSql": "SELECT toStartOfHour(timestamp) AS time, round(sum(revenue_eur), 2) AS revenue_eur FROM chargesquare.charging_events WHERE event_type = 'session_stop' AND timestamp >= now() - INTERVAL 24 HOUR GROUP BY time ORDER BY time",
+          "refId": "Revenue"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "revenue_eur" }, "properties": [{ "id": "custom.axisPlacement", "value": "right" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }, { "id": "unit", "value": "currencyEUR" }] },
+          { "matcher": { "id": "byName", "options": "sessions" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }] }
+        ]
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+
+    {
+      "id": 6,
+      "title": "Network Performance",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 9 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT network_id AS Network, count() AS Sessions, round(sum(revenue_eur), 2) AS \"Revenue (€)\", round(sum(energy_kwh), 1) AS \"Energy (kWh)\", round(avg(duration_minutes), 1) AS \"Avg Duration (min)\" FROM chargesquare.charging_events WHERE event_type = 'session_stop' GROUP BY network_id ORDER BY \"Revenue (€)\" DESC",
+        "refId": "A"
+      }],
+      "options": { "sortBy": [{ "displayName": "Revenue (€)", "desc": true }] },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [{ "matcher": { "id": "byName", "options": "Revenue (€)" }, "properties": [{ "id": "unit", "value": "currencyEUR" }] }, { "matcher": { "id": "byName", "options": "Energy (kWh)" }, "properties": [{ "id": "unit", "value": "kwh" }] }] }
+    },
+
+    {
+      "id": 7,
+      "title": "Charger Utilisation",
+      "type": "table",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 9 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT charger_type AS \"Charger Type\", count() AS Sessions, round(avg(energy_kwh / nullIf(duration_minutes / 60.0, 0)), 1) AS \"Avg Power (kW)\", round(avg(energy_kwh), 1) AS \"Avg kWh\", round(avg(revenue_eur), 2) AS \"Avg Revenue (€)\" FROM chargesquare.charging_events WHERE event_type = 'session_stop' AND duration_minutes > 0 GROUP BY charger_type ORDER BY \"Avg Power (kW)\" DESC",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [{ "matcher": { "id": "byName", "options": "Avg Revenue (€)" }, "properties": [{ "id": "unit", "value": "currencyEUR" }] }, { "matcher": { "id": "byName", "options": "Avg kWh" }, "properties": [{ "id": "unit", "value": "kwh" }] }] }
+    },
+
+    {
+      "id": 8,
+      "title": "Top Cities by Energy",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 22, "w": 12, "h": 9 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT city AS City, country AS Country, count() AS Sessions, round(sum(energy_kwh), 1) AS \"Energy (kWh)\", round(sum(revenue_eur), 2) AS \"Revenue (€)\" FROM chargesquare.charging_events WHERE event_type = 'session_stop' GROUP BY city, country ORDER BY \"Energy (kWh)\" DESC LIMIT 15",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [{ "matcher": { "id": "byName", "options": "Revenue (€)" }, "properties": [{ "id": "unit", "value": "currencyEUR" }] }, { "matcher": { "id": "byName", "options": "Energy (kWh)" }, "properties": [{ "id": "unit", "value": "kwh" }] }] }
+    },
+
+    {
+      "id": 9,
+      "title": "Fault Diagnostics",
+      "type": "table",
+      "gridPos": { "x": 12, "y": 22, "w": 12, "h": 9 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT fault_code AS \"Error Code\", count() AS Occurrences, round(count() * 100.0 / sum(count()) OVER (), 1) AS \"% of Faults\" FROM chargesquare.charging_events WHERE event_type = 'fault_alert' GROUP BY fault_code ORDER BY Occurrences DESC LIMIT 10",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [{ "matcher": { "id": "byName", "options": "% of Faults" }, "properties": [{ "id": "unit", "value": "percent" }] }] }
+    },
+
+    {
+      "id": 10,
+      "title": "Vehicle Brand Breakdown",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 31, "w": 12, "h": 9 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT vehicle_brand AS Brand, count() AS Sessions, round(avg(duration_minutes), 1) AS \"Avg Duration (min)\", round(avg(energy_kwh), 1) AS \"Avg kWh\", round(avg(revenue_eur), 2) AS \"Avg Revenue (€)\", round(sum(energy_kwh), 1) AS \"Total kWh\" FROM chargesquare.charging_events WHERE event_type = 'session_stop' GROUP BY vehicle_brand ORDER BY Sessions DESC LIMIT 15",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [{ "matcher": { "id": "byName", "options": "Avg Revenue (€)" }, "properties": [{ "id": "unit", "value": "currencyEUR" }] }] }
+    },
+
+    {
+      "id": 11,
+      "title": "Peak vs Off-Peak Revenue",
+      "type": "barchart",
+      "gridPos": { "x": 12, "y": 31, "w": 12, "h": 9 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "WITH periods AS (SELECT 'Morning Peak (07-09)' AS period, 1 AS s UNION ALL SELECT 'Evening Peak (17-20)', 2 UNION ALL SELECT 'Off-Peak', 3), actuals AS (SELECT multiIf(toHour(timestamp) IN (7,8), 'Morning Peak (07-09)', toHour(timestamp) IN (17,18,19), 'Evening Peak (17-20)', 'Off-Peak') AS period, count() AS sessions, round(sum(revenue_eur), 2) AS revenue FROM chargesquare.charging_events WHERE event_type = 'session_stop' GROUP BY period) SELECT p.period AS Period, coalesce(a.sessions, 0) AS Sessions, coalesce(a.revenue, 0) AS \"Revenue (€)\" FROM periods p LEFT JOIN actuals a ON p.period = a.period ORDER BY p.s",
+        "refId": "A"
+      }],
+      "options": { "xField": "Period", "barWidth": 0.6, "groupWidth": 0.7, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [{ "matcher": { "id": "byName", "options": "Revenue (€)" }, "properties": [{ "id": "unit", "value": "currencyEUR" }, { "id": "custom.axisPlacement", "value": "right" }] }] }
+    },
+
+    {
+      "id": 12,
+      "title": "Fault Density by City",
+      "type": "barchart",
+      "gridPos": { "x": 0, "y": 40, "w": 24, "h": 9 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT city AS City, count() AS Faults, round(count() * 100.0 / sum(count()) OVER (), 2) AS \"% of All Faults\" FROM chargesquare.charging_events WHERE event_type = 'fault_alert' GROUP BY city ORDER BY Faults DESC LIMIT 15",
+        "refId": "A"
+      }],
+      "options": { "xField": "City", "barWidth": 0.6, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "red" } }, "overrides": [{ "matcher": { "id": "byName", "options": "% of All Faults" }, "properties": [{ "id": "unit", "value": "percent" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] }] }
+    },
+
+    {
+      "id": 13,
+      "title": "Tariff Performance",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 49, "w": 24, "h": 8 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT tariff_id AS Tariff, count() AS Sessions, round(avg(revenue_eur), 2) AS \"Avg Revenue (€)\", round(avg(energy_kwh), 1) AS \"Avg kWh\", round(sum(revenue_eur) / nullIf(sum(energy_kwh), 0), 3) AS \"€/kWh\" FROM chargesquare.charging_events WHERE event_type = 'session_stop' GROUP BY tariff_id ORDER BY \"Avg Revenue (€)\" DESC LIMIT 15",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [{ "matcher": { "id": "byName", "options": "Avg Revenue (€)" }, "properties": [{ "id": "unit", "value": "currencyEUR" }] }] }
+    }
+
+  ]
+}
