@@ -53,101 +53,125 @@ A real-time event streaming and analytics pipeline built for a data engineering 
 **Prerequisites:** Docker & Docker Compose (that's it — everything runs in containers).
 
 ```bash
-# 1. Build the app image
-make build
-
-# 2. Start all services (Kafka, Redis, ClickHouse, Grafana, Kafka UI)
-make up
+make build   # build the app Docker image (run once, or after code changes)
+make up      # start Kafka, Redis, ClickHouse, Grafana, Kafka UI
 ```
 
-Web UIs once running:
+Web UIs:
 - **Grafana** → http://localhost:3000 &nbsp;`admin / chargesquare`
 - **Kafka UI** → http://localhost:8080
 
+> Consumers automatically wait for the Kafka topic to be ready — you can start them immediately after `make up`.
+
 ---
 
-## Running the Pipeline
+## Mode 1 — Live Simulation
 
-Open three terminals:
+Generates events in real time and streams them through the full pipeline.
 
-**Terminal 1 — Redis consumer (real-time state)**
+**Terminal 1 — Redis consumer** (real-time state)
 ```bash
 make consumer-redis
 ```
 
-**Terminal 2 — ClickHouse consumer (analytics)**
+**Terminal 2 — ClickHouse consumer** (analytics writer)
 ```bash
 make consumer-ch
 ```
 
-**Terminal 3 — Producer** (wait for both consumers to show `Assigned 12 partitions` first)
+**Terminal 3 — Producer** (start after both consumers show `Assigned 12 partitions`)
 ```bash
 make producer          # 10,000 eps, 4 workers
 make producer-fast     # 50,000 eps, 8 workers
 make producer-max      # 100,000 eps, 16 workers
 ```
 
-> Consumers will automatically wait for the Kafka topic to be ready — you can start them immediately after `make up` without worrying about timing.
+**View results:**
+```bash
+make report       # one-shot analytics report in the terminal
+make dashboard    # live dashboard, auto-refreshes every 30s
+```
+Or open Grafana at http://localhost:3000 — set the time picker to **Last 1 hour** or **Last 24 hours**.
 
 ---
 
-## Viewing Analytics
+## Mode 2 — Backfill (Historical Data)
 
-```bash
-make report       # one-shot analytics report (printed to terminal)
-make dashboard    # live dashboard, refreshes every 30s
-```
+Injects 24 hours of yesterday's events so all time buckets (Morning Peak, Evening Peak, Off-Peak) appear in reports and Grafana. The ClickHouse consumer must run with the watermark disabled to accept old timestamps.
 
-Or open Grafana at http://localhost:3000 — the dashboard loads automatically.
-
----
-
-## Common Workflows
-
-### Reset everything
-```bash
-make down && make up
-```
-Wipes all data in Kafka, Redis, and ClickHouse and starts clean.
-
-### Populate historical data (backfill)
-
-Backfill injects 24 hours of yesterday's events so all time buckets (Morning Peak, Evening Peak, Off-Peak) show up in reports. Run consumers first, then backfill.
-
-**Terminal 1:**
+**Terminal 1 — Redis consumer**
 ```bash
 make consumer-redis
 ```
 
-**Terminal 2:**
+**Terminal 2 — ClickHouse consumer with watermark disabled**
 ```bash
-make consumer-ch-backfill   # CH consumer with watermark disabled (accepts old timestamps)
+make consumer-ch-backfill
 ```
 
-**Terminal 3** (after both consumers show `Assigned 12 partitions`):
+**Terminal 3 — Backfill** (start after both consumers show `Assigned 12 partitions`)
 ```bash
 make backfill
 ```
 
-Then once the consumers finish processing:
+**View results** (once consumers finish processing):
 ```bash
 make report
 ```
+In Grafana, set the time picker to **Yesterday** or **Last 2 days** — backfill data uses yesterday's timestamps.
 
-To view in Grafana, set the time picker to **Yesterday** or **Last 2 days** — backfill data uses yesterday's timestamps.
+---
 
-### Scale test (1k → 10k → 50k → 100k eps)
+## All Commands
+
+### Infrastructure
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build the app Docker image |
+| `make up` | Start all services (Kafka, Redis, ClickHouse, Grafana, Kafka UI) |
+| `make down` | Stop everything and wipe all data volumes |
+| `make status` | Show container health |
+| `make logs` | Stream all container logs |
+
+### Consumers
+
+| Command | Description |
+|---------|-------------|
+| `make consumer-redis` | Start Redis consumer — writes real-time state (sessions, status, counters) |
+| `make consumer-ch` | Start ClickHouse consumer — writes analytics data (live events only) |
+| `make consumer-ch-backfill` | Start ClickHouse consumer with watermark disabled — use this for backfill |
+| `make pipeline` | Start both consumers in the background (for live mode) |
+
+### Producer / Data Ingestion
+
+| Command | Description |
+|---------|-------------|
+| `make producer` | Run simulator at 10,000 events/sec (4 workers) |
+| `make producer-fast` | Run simulator at 50,000 events/sec (8 workers) |
+| `make producer-max` | Run simulator at 100,000 events/sec (16 workers) |
+| `make backfill` | Inject 24h of historical data (yesterday's timestamps) — use with `consumer-ch-backfill` |
+
+### Analytics
+
+| Command | Description |
+|---------|-------------|
+| `make report` | Print a full one-shot analytics report to the terminal |
+| `make dashboard` | Live terminal dashboard, refreshes every 30s |
+
+### Testing & Benchmarking
+
+| Command | Description |
+|---------|-------------|
+| `make test` | Run all 25 unit tests inside Docker |
+| `make benchmark` | Measure generator + Kafka throughput |
+| `python scripts/scale_test.py` | Incremental scale test: 1k → 10k → 50k → 100k eps |
+
+### Reset
+
 ```bash
-python scripts/scale_test.py             # 30s per tier
-python scripts/scale_test.py --duration 60
-```
-
-Runs all 4 tiers back-to-back and prints a summary table with actual throughput vs target.
-
-### Benchmark (no consumers needed)
-```bash
-make benchmark                        # generator throughput only
-make benchmark -- --kafka             # also measures Kafka delivery
+make down && make up         # wipe everything and start fresh
+make down && make build && make up   # also rebuild the image (after code changes)
 ```
 
 ---
@@ -247,7 +271,7 @@ All settings are in `config/settings.py` and can be overridden with environment 
 | `TARGET_EPS` | `10000` | Simulator target events/sec |
 | `NUM_PRODUCERS` | `4` | Producer worker processes |
 | `CH_BATCH_SIZE` | `10000` | ClickHouse insert batch size |
-| `WATERMARK_MAX_LATENESS_S` | `300` | Late event tolerance in seconds |
+| `WATERMARK_MAX_LATENESS_S` | `300` | Late event tolerance in seconds (`999999` to disable for backfill) |
 
 ---
 
