@@ -87,6 +87,8 @@ make producer-fast     # 50,000 eps, 8 workers
 make producer-max      # 100,000 eps, 16 workers
 ```
 
+> Consumers will automatically wait for the Kafka topic to be ready — you can start them immediately after `make up` without worrying about timing.
+
 ---
 
 ## Viewing Analytics
@@ -110,18 +112,29 @@ Wipes all data in Kafka, Redis, and ClickHouse and starts clean.
 
 ### Populate historical data (backfill)
 
-Backfill injects 24 hours of yesterday's events so all time buckets (Morning Peak, Evening Peak, Off-Peak) show up in reports.
+Backfill injects 24 hours of yesterday's events so all time buckets (Morning Peak, Evening Peak, Off-Peak) show up in reports. Run consumers first, then backfill.
 
+**Terminal 1:**
 ```bash
-make backfill-full    # starts CH consumer + runs backfill in one step
-make report           # run after consumer finishes
+make consumer-redis
 ```
 
-Or manually in two terminals:
+**Terminal 2:**
 ```bash
-make consumer-ch-backfill   # terminal 1 — CH consumer with watermark disabled
-make backfill               # terminal 2
+make consumer-ch-backfill   # CH consumer with watermark disabled (accepts old timestamps)
 ```
+
+**Terminal 3** (after both consumers show `Assigned 12 partitions`):
+```bash
+make backfill
+```
+
+Then once the consumers finish processing:
+```bash
+make report
+```
+
+To view in Grafana, set the time picker to **Yesterday** or **Last 2 days** — backfill data uses yesterday's timestamps.
 
 ### Scale test (1k → 10k → 50k → 100k eps)
 ```bash
