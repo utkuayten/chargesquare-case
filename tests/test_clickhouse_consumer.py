@@ -63,7 +63,7 @@ class TestEventToRow:
 
     def test_row_length(self):
         row = event_to_row(self._sample_event())
-        assert len(row) == 21
+        assert len(row) == 28
 
     def test_types(self):
         row = event_to_row(self._sample_event())

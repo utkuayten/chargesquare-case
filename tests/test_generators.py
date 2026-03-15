@@ -106,6 +106,7 @@ class TestEventGenerator:
             "charger_type","power_kw","energy_kwh","soc_percent","vehicle_type",
             "duration_minutes","price_per_kwh","revenue_eur","status",
             "error_code","component","voltage_v","current_a",
+            "vehicle_brand","vehicle_model","vehicle_ev_id","tariff_id",
         }
         assert expected_keys == set(d.keys())
 
