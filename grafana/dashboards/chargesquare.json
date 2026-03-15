@@ -101,6 +101,26 @@
     },
 
     {
+      "id": 20,
+      "title": "Peak vs Off-Peak Revenue",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 7 },
+      "targets": [{
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
+        "rawSql": "SELECT multiIf(toHour(hour) >= 7 AND toHour(hour) < 9, 'Morning Peak (07-09)', toHour(hour) >= 12 AND toHour(hour) < 14, 'Lunch Peak (12-14)', toHour(hour) >= 17 AND toHour(hour) < 20, 'Evening Peak (17-20)', 'Off-Peak') AS Period, sum(session_count) AS Sessions, round(sum(total_revenue_eur), 2) AS \"Revenue (€)\", round(sum(total_energy_kwh), 1) AS \"Energy (kWh)\", round(sum(total_revenue_eur) / nullIf(sum(session_count), 0), 2) AS \"Rev/Session (€)\" FROM chargesquare.sessions_hourly_mv WHERE $__timeFilter(hour) GROUP BY Period ORDER BY \"Revenue (€)\" DESC",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Revenue (€)" }, "properties": [{ "id": "unit", "value": "currencyEUR" }] },
+          { "matcher": { "id": "byName", "options": "Rev/Session (€)" }, "properties": [{ "id": "unit", "value": "currencyEUR" }] },
+          { "matcher": { "id": "byName", "options": "Energy (kWh)" }, "properties": [{ "id": "unit", "value": "kwh" }] }
+        ]
+      }
+    },
+
+    {
       "id": 6,
       "title": "Network Performance",
       "type": "table",
@@ -173,7 +193,7 @@
       "gridPos": { "x": 12, "y": 31, "w": 12, "h": 9 },
       "targets": [{
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
-        "rawSql": "WITH periods AS (SELECT 'Morning Peak (07-09)' AS period, 1 AS s UNION ALL SELECT 'Evening Peak (17-20)', 2 UNION ALL SELECT 'Off-Peak', 3), actuals AS (SELECT multiIf(toHour(timestamp) IN (7,8), 'Morning Peak (07-09)', toHour(timestamp) IN (17,18,19), 'Evening Peak (17-20)', 'Off-Peak') AS period, count() AS sessions, round(sum(revenue_eur), 2) AS revenue FROM chargesquare.charging_events WHERE event_type = 'session_stop' AND $__timeFilter(timestamp) GROUP BY period) SELECT p.period AS Period, coalesce(a.sessions, 0) AS Sessions, coalesce(a.revenue, 0) AS \"Revenue (€)\" FROM periods p LEFT JOIN actuals a ON p.period = a.period ORDER BY p.s",
+        "rawSql": "WITH periods AS (SELECT 'Morning Peak (07-09)' AS period, 1 AS s UNION ALL SELECT 'Lunch Peak (12-14)', 2 UNION ALL SELECT 'Evening Peak (17-20)', 3 UNION ALL SELECT 'Off-Peak', 4), actuals AS (SELECT multiIf(toHour(timestamp) IN (7,8), 'Morning Peak (07-09)', toHour(timestamp) IN (12,13), 'Lunch Peak (12-14)', toHour(timestamp) IN (17,18,19), 'Evening Peak (17-20)', 'Off-Peak') AS period, count() AS sessions, round(sum(revenue_eur), 2) AS revenue FROM chargesquare.charging_events WHERE event_type = 'session_stop' AND $__timeFilter(timestamp) GROUP BY period) SELECT p.period AS Period, coalesce(a.sessions, 0) AS Sessions, coalesce(a.revenue, 0) AS \"Revenue (€)\" FROM periods p LEFT JOIN actuals a ON p.period = a.period ORDER BY p.s",
         "refId": "A"
       }],
       "options": { "xField": "Period", "barWidth": 0.6, "groupWidth": 0.7, "legend": { "displayMode": "list", "placement": "bottom" } },

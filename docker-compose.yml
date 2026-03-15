@@ -122,6 +122,12 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - REDIS_HOST=redis
       - CLICKHOUSE_HOST=clickhouse
+    volumes:
+      - ./exports:/app/exports
+      - ./consumers:/app/consumers
+      - ./simulator:/app/simulator
+      - ./scripts:/app/scripts
+      - ./config:/app/config
     depends_on:
       kafka:
         condition: service_healthy

@@ -2,7 +2,7 @@
 Event generator for the ChargeSquare EV charging simulator.
 
 Produces realistic charging events drawn from weighted distributions
-covering 10 European CPO networks, 20 cities, and four charger classes.
+covering 10 Turkish CPO networks, 20 cities, and four charger classes.
 """
 
 from __future__ import annotations
@@ -25,42 +25,42 @@ from .models import (
 # Reference data
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Charging network operators (CPOs)
+# Charging network operators (CPOs) — Turkish market
 NETWORKS: List[Dict] = [
-    {"id": "IONITY",       "price": 0.79},
-    {"id": "TESLA_SC",     "price": 0.42},
-    {"id": "CHARGEPOINT",  "price": 0.38},
-    {"id": "EVBOX",        "price": 0.35},
-    {"id": "ALLEGO",       "price": 0.41},
-    {"id": "FASTNED",      "price": 0.69},
-    {"id": "RECHARGE",     "price": 0.44},
-    {"id": "SHELL_RC",     "price": 0.49},
-    {"id": "BP_PULSE",     "price": 0.52},
-    {"id": "VIRTA",        "price": 0.36},
+    {"id": "ZES",            "price": 0.89},
+    {"id": "EŞARJ",          "price": 0.76},
+    {"id": "TESLA_SC",       "price": 0.95},
+    {"id": "AKSAENERGY",     "price": 0.72},
+    {"id": "VOLTRUN",        "price": 0.68},
+    {"id": "TOROSLAR_EDS",   "price": 0.65},
+    {"id": "SHELL_RECHARGE", "price": 0.82},
+    {"id": "BP_PULSE",       "price": 0.78},
+    {"id": "OTOCHARGE",      "price": 0.70},
+    {"id": "TRUGO",          "price": 0.74},
 ]
 
-# European cities — weight ≈ relative EV density / population
+# Turkish cities — weight ≈ relative EV density / population
 CITIES: List[Dict] = [
-    {"city": "Berlin",       "country": "DE", "lat": 52.5200,  "lon": 13.4050,  "w": 10},
-    {"city": "Hamburg",      "country": "DE", "lat": 53.5753,  "lon": 10.0153,  "w": 7},
-    {"city": "Munich",       "country": "DE", "lat": 48.1351,  "lon": 11.5820,  "w": 8},
-    {"city": "Frankfurt",    "country": "DE", "lat": 50.1109,  "lon": 8.6821,   "w": 7},
-    {"city": "Amsterdam",    "country": "NL", "lat": 52.3676,  "lon": 4.9041,   "w": 9},
-    {"city": "Rotterdam",    "country": "NL", "lat": 51.9244,  "lon": 4.4777,   "w": 5},
-    {"city": "Paris",        "country": "FR", "lat": 48.8566,  "lon": 2.3522,   "w": 10},
-    {"city": "Lyon",         "country": "FR", "lat": 45.7640,  "lon": 4.8357,   "w": 5},
-    {"city": "London",       "country": "GB", "lat": 51.5074,  "lon": -0.1278,  "w": 10},
-    {"city": "Manchester",   "country": "GB", "lat": 53.4808,  "lon": -2.2426,  "w": 6},
-    {"city": "Oslo",         "country": "NO", "lat": 59.9139,  "lon": 10.7522,  "w": 8},
-    {"city": "Bergen",       "country": "NO", "lat": 60.3913,  "lon": 5.3221,   "w": 4},
-    {"city": "Stockholm",    "country": "SE", "lat": 59.3293,  "lon": 18.0686,  "w": 7},
-    {"city": "Gothenburg",   "country": "SE", "lat": 57.7089,  "lon": 11.9746,  "w": 5},
-    {"city": "Copenhagen",   "country": "DK", "lat": 55.6761,  "lon": 12.5683,  "w": 6},
-    {"city": "Brussels",     "country": "BE", "lat": 50.8503,  "lon": 4.3517,   "w": 5},
-    {"city": "Vienna",       "country": "AT", "lat": 48.2082,  "lon": 16.3738,  "w": 6},
-    {"city": "Zurich",       "country": "CH", "lat": 47.3769,  "lon": 8.5417,   "w": 5},
-    {"city": "Madrid",       "country": "ES", "lat": 40.4168,  "lon": -3.7038,  "w": 7},
-    {"city": "Barcelona",    "country": "ES", "lat": 41.3851,  "lon": 2.1734,   "w": 6},
+    {"city": "Istanbul",     "country": "TR", "lat": 41.0082,  "lon": 28.9784,  "w": 20},
+    {"city": "Ankara",       "country": "TR", "lat": 39.9208,  "lon": 32.8541,  "w": 12},
+    {"city": "Izmir",        "country": "TR", "lat": 38.4192,  "lon": 27.1287,  "w": 10},
+    {"city": "Bursa",        "country": "TR", "lat": 40.1885,  "lon": 29.0610,  "w": 7},
+    {"city": "Antalya",      "country": "TR", "lat": 36.8969,  "lon": 30.7133,  "w": 7},
+    {"city": "Adana",        "country": "TR", "lat": 37.0000,  "lon": 35.3213,  "w": 5},
+    {"city": "Konya",        "country": "TR", "lat": 37.8715,  "lon": 32.4846,  "w": 5},
+    {"city": "Gaziantep",    "country": "TR", "lat": 37.0662,  "lon": 37.3833,  "w": 4},
+    {"city": "Mersin",       "country": "TR", "lat": 36.8000,  "lon": 34.6333,  "w": 4},
+    {"city": "Kayseri",      "country": "TR", "lat": 38.7312,  "lon": 35.4787,  "w": 4},
+    {"city": "Eskisehir",    "country": "TR", "lat": 39.7767,  "lon": 30.5206,  "w": 4},
+    {"city": "Trabzon",      "country": "TR", "lat": 41.0015,  "lon": 39.7178,  "w": 3},
+    {"city": "Samsun",       "country": "TR", "lat": 41.2867,  "lon": 36.3300,  "w": 3},
+    {"city": "Denizli",      "country": "TR", "lat": 37.7765,  "lon": 29.0864,  "w": 3},
+    {"city": "Bodrum",       "country": "TR", "lat": 37.0344,  "lon": 27.4305,  "w": 3},
+    {"city": "Mugla",        "country": "TR", "lat": 37.2153,  "lon": 28.3636,  "w": 3},
+    {"city": "Kocaeli",      "country": "TR", "lat": 40.8533,  "lon": 29.8815,  "w": 4},
+    {"city": "Tekirdag",     "country": "TR", "lat": 40.9833,  "lon": 27.5167,  "w": 3},
+    {"city": "Sakarya",      "country": "TR", "lat": 40.6940,  "lon": 30.4358,  "w": 3},
+    {"city": "Canakkale",    "country": "TR", "lat": 40.1553,  "lon": 26.4142,  "w": 2},
 ]
 
 # Charger configs: (type, power_min_kw, power_max_kw, weight)

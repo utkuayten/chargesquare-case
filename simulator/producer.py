@@ -96,6 +96,7 @@ def _worker(
     bootstrap_servers: str,
     station_data:     List[dict],
     shutdown:         mp.Event,
+    total_counter:    mp.Value,
 ) -> None:
     """
     Runs in a child process.
@@ -175,6 +176,8 @@ def _worker(
     remaining = producer.flush(timeout=2)
     if remaining:
         log.warning("Worker-%d: %d messages not flushed on shutdown.", worker_id, remaining)
+    with total_counter.get_lock():
+        total_counter.value += sent
     log.info("Worker-%d stopped. Total sent: %s", worker_id, f"{sent:,}")
 
 
@@ -209,22 +212,22 @@ def run_producer(
     )
     log.info("Registry ready: %s stations", f"{len(registry.stations):,}")
 
-    eps_per_worker = target_eps // num_workers
-    shutdown       = mp.Event()
+    eps_per_worker  = target_eps // num_workers
+    shutdown        = mp.Event()
+    total_counter   = mp.Value('L', 0)
 
     processes = [
         mp.Process(
             target=_worker,
-            args=(i, eps_per_worker, bootstrap_servers, registry.stations, shutdown),
+            args=(i, eps_per_worker, bootstrap_servers, registry.stations, shutdown, total_counter),
             name=f"Producer-{i}",
-            daemon=True,
+            daemon=False,
         )
         for i in range(num_workers)
     ]
 
     def _handle_signal(_sig, _frame):
         shutdown.set()
-        os._exit(0)
 
     signal.signal(signal.SIGINT,  _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
@@ -235,16 +238,22 @@ def run_producer(
     try:
         if duration_seconds:
             deadline = time.monotonic() + duration_seconds
-            while time.monotonic() < deadline:
+            while time.monotonic() < deadline and not shutdown.is_set():
                 time.sleep(0.2)
         else:
-            while True:
+            while not shutdown.is_set():
                 time.sleep(0.2)
     except (KeyboardInterrupt, SystemExit):
-        pass
+        shutdown.set()
 
-    shutdown.set()
-    log.info("All producer workers stopped.")
+    for p in processes:
+        p.join(timeout=5)
+        if p.is_alive():
+            p.terminate()
+
+    log.info("=" * 60)
+    log.info("Producer stopped. Grand total: %s events", f"{total_counter.value:,}")
+    log.info("=" * 60)
     os._exit(0)
 
 

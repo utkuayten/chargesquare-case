@@ -67,7 +67,17 @@ def backfill(events_per_hour: int = 100_000) -> None:
     t0       = time.monotonic()
 
     for hour in range(24):
-        events = manager.generate_batch(events_per_hour)
+        if 7 <= hour < 9:
+            label, multiplier = "MORNING PEAK", 2.5
+        elif 17 <= hour < 20:
+            label, multiplier = "EVENING PEAK", 3.0
+        elif 12 <= hour < 14:
+            label, multiplier = "LUNCH PEAK",   1.5
+        else:
+            label, multiplier = "off-peak",     1.0
+
+        count  = int(events_per_hour * multiplier)
+        events = manager.generate_batch(count)
         # Rewrite every event's timestamp to fall within this UTC hour
         for ev in events:
             ev.timestamp = _ts_in_hour(hour)
@@ -83,10 +93,7 @@ def backfill(events_per_hour: int = 100_000) -> None:
                     producer.poll(0.1)  # drain callbacks, then retry
         producer.poll(0)
         total += len(events)
-        label = ("MORNING PEAK" if 7 <= hour < 9 else
-                 "EVENING PEAK" if 17 <= hour < 20 else
-                 "off-peak")
-        log.info("Hour %02d:xx  %-14s  %d events queued", hour, label, len(events))
+        log.info("Hour %02d:xx  %-14s  x%.1f  %d events queued", hour, label, multiplier, count)
 
     log.info("Flushing %d events to Kafka…", total)
     remaining = producer.flush(timeout=120)

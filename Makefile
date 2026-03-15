@@ -1,5 +1,5 @@
 .PHONY: help build up down logs status producer producer-fast producer-max \
-        consumer-redis consumer-ch consumer-ch-backfill pipeline dashboard report benchmark backfill backfill-full test clean
+        consumer-redis consumer-ch consumer-ch-backfill pipeline dashboard report benchmark backfill backfill-full export-parquet test clean
 
 RUN = docker-compose run --rm app
 
@@ -31,6 +31,7 @@ help:
 	@echo "    make report          Print a one-shot analytics report"
 	@echo "    make benchmark       Run throughput benchmark"
 	@echo "    make backfill        Inject 24 h of historical data (all time periods)"
+	@echo "    make export-parquet  Export all events from ClickHouse to Parquet"
 	@echo ""
 	@echo "  Dev"
 	@echo "    make test            Run unit tests"
@@ -103,6 +104,9 @@ backfill-full:
 	@echo "Running backfill..."
 	$(RUN) python scripts/backfill.py
 	@echo "Done. Run 'make report' when consumer finishes processing."
+
+export-parquet:
+	$(RUN) python scripts/export_parquet.py
 
 # ─────────────────────────────────────────────────────────
 test:

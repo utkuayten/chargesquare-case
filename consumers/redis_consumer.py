@@ -318,12 +318,21 @@ def run(
             now = time.monotonic()
             if now - t_report >= 15.0:
                 eps = total / max(now - t_start, 1)
+                try:
+                    rs = writer.r.info("stats")
+                    rm = writer.r.info("memory")
+                    redis_ops  = rs.get("instantaneous_ops_per_sec", 0)
+                    redis_mem  = rm.get("used_memory_human", "?")
+                except Exception:
+                    redis_ops, redis_mem = 0, "?"
                 log.info(
-            "Heartbeat: processed %s events (%.0f eps)  "
-            "dead_letter=%d  dedup_hits=%d (%.1f%%)",
-            f"{total:,}", eps,
-            dead_letter.count, dedup.hits, dedup.hit_rate * 100,
-        )
+                    "Heartbeat: processed %s events (%.0f eps)  "
+                    "dead_letter=%d  dedup_hits=%d (%.1f%%)  "
+                    "redis_ops/s=%s  redis_mem=%s",
+                    f"{total:,}", eps,
+                    dead_letter.count, dedup.hits, dedup.hit_rate * 100,
+                    redis_ops, redis_mem,
+                )
                 t_report = now
 
             if not msgs:

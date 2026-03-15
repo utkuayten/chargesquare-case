@@ -22,3 +22,5 @@ logs/
 
 # OS
 .DS_Store
+exports/
+CS-dataengineer-report*

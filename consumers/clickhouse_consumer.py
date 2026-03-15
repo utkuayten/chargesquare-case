@@ -207,7 +207,10 @@ class BatchWriter:
             try:
                 self._client.execute(_INSERT_SQL, batch)
                 self._total_rows += len(batch)
-                log.debug("Flushed %d rows (total %s)", len(batch), f"{self._total_rows:,}")
+                if len(batch) < CLICKHOUSE.insert_batch_size:
+                    log.info("Partial flush: %d rows → ClickHouse (total %s)", len(batch), f"{self._total_rows:,}")
+                else:
+                    log.debug("Flushed %d rows (total %s)", len(batch), f"{self._total_rows:,}")
             except Exception as exc:
                 self._flush_errors += 1
                 log.error("ClickHouse insert error (%d total): %s", self._flush_errors, exc)
@@ -232,8 +235,8 @@ def run(
         "auto.offset.reset":      "latest",
         "enable.auto.commit":     True,
         "auto.commit.interval.ms":5000,
-        "fetch.min.bytes":        65_536,
-        "fetch.wait.max.ms":      1000,
+        "fetch.min.bytes":        1,
+        "fetch.wait.max.ms":      300,
         "max.poll.interval.ms":   300_000,
     })
     for attempt in range(30):
@@ -273,27 +276,33 @@ def run(
     signal.signal(signal.SIGINT,  _sig)
     signal.signal(signal.SIGTERM, _sig)
 
-    total   = 0
-    t_start = time.monotonic()
-    t_report = t_start
+    total      = 0
+    t_start    = time.monotonic()
+    t_report   = t_start
     t_last_msg = t_start
+    t_last_flush = t_start
 
     try:
         while not shutdown:
             try:
-                msgs = consumer.consume(num_messages=batch_size, timeout=1.0)
+                msgs = consumer.consume(num_messages=batch_size, timeout=0.3)
             except KeyboardInterrupt:
+                shutdown = True
                 break
             if not msgs:
                 writer.flush()
                 if _BACKFILL_MODE and (time.monotonic() - t_last_msg) >= _BACKFILL_IDLE_EXIT_S:
                     log.info("Backfill complete — no new messages for %ds, exiting.", _BACKFILL_IDLE_EXIT_S)
                     break
+                if shutdown:
+                    break
                 continue
 
             t_last_msg = time.monotonic()
 
             for m in msgs:
+                if shutdown:
+                    break
                 if m.error():
                     log.error("Kafka error: %s", m.error())
                     continue
@@ -336,6 +345,9 @@ def run(
                     dead_letter.write(ev, f"row_conversion_error:{exc}")
 
             now = time.monotonic()
+            if now - t_last_flush >= 2.0:
+                writer.flush()
+                t_last_flush = now
             if now - t_report >= 15.0:
                 eps = total / (now - t_start)
                 log.info(
@@ -347,7 +359,10 @@ def run(
                 t_report = now
     finally:
         writer.flush()
-        consumer.close()
+        try:
+            consumer.close()
+        except Exception:
+            pass
         log.info("ClickHouse consumer stopped. Total: %s  CH rows: %s",
                  f"{total:,}", f"{writer.total_rows:,}")
 
