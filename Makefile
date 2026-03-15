@@ -1,5 +1,5 @@
 .PHONY: help build up down logs status producer producer-fast producer-max \
-        consumer-redis consumer-ch pipeline dashboard report benchmark backfill test
+        consumer-redis consumer-ch consumer-ch-backfill pipeline dashboard report benchmark backfill backfill-full test
 
 RUN = docker-compose run --rm app
 
@@ -93,6 +93,16 @@ backfill:
 
 backfill-direct:
 	$(RUN) python scripts/backfill_direct.py
+
+consumer-ch-backfill:
+	docker-compose run --rm -e WATERMARK_MAX_LATENESS_S=999999 app python -m consumers.clickhouse_consumer
+
+backfill-full:
+	@echo "Starting CH consumer with watermark disabled..."
+	docker-compose run -d --rm --name cs-ch-backfill -e WATERMARK_MAX_LATENESS_S=999999 app python -m consumers.clickhouse_consumer
+	@echo "Running backfill..."
+	$(RUN) python scripts/backfill.py
+	@echo "Done. Run 'make report' when consumer finishes processing."
 
 # ─────────────────────────────────────────────────────────
 test:
