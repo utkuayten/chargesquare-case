@@ -277,7 +277,13 @@ def run(
         "max.poll.interval.ms":   300_000,
         "queued.max.messages.kbytes": 131_072,  # 128 MB prefetch buffer
     })
-    meta = consumer.list_topics(KAFKA.topic_charging_events, timeout=10)
+    for attempt in range(30):
+        meta = consumer.list_topics(KAFKA.topic_charging_events, timeout=5)
+        topic_meta = meta.topics.get(KAFKA.topic_charging_events)
+        if topic_meta and topic_meta.partitions and not topic_meta.error:
+            break
+        log.info("Waiting for topic '%s' to be ready... (%d/30)", KAFKA.topic_charging_events, attempt + 1)
+        time.sleep(2)
     partitions = [
         TopicPartition(KAFKA.topic_charging_events, p, OFFSET_END)
         for p in meta.topics[KAFKA.topic_charging_events].partitions
