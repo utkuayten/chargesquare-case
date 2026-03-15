@@ -58,6 +58,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import signal
 import threading
 import time
@@ -69,6 +70,10 @@ from clickhouse_driver import Client as CH
 from confluent_kafka import Consumer, TopicPartition, OFFSET_BEGINNING, OFFSET_END
 
 from config.settings import CLICKHOUSE, KAFKA
+
+# Backfill mode: watermark disabled means we read from beginning and auto-exit when idle
+_BACKFILL_MODE = int(os.environ.get("WATERMARK_MAX_LATENESS_S", "300")) >= 999999
+_BACKFILL_IDLE_EXIT_S = 10  # exit after this many seconds of no messages in backfill mode
 from consumers.validator import DeadLetterWriter, validate
 from consumers.deduplicator import Deduplicator
 from consumers.watermark import Watermark
@@ -238,12 +243,14 @@ def run(
             break
         log.info("Waiting for topic '%s' to be ready... (%d/30)", KAFKA.topic_charging_events, attempt + 1)
         time.sleep(2)
+    offset = OFFSET_BEGINNING if _BACKFILL_MODE else OFFSET_END
+    offset_label = "beginning" if _BACKFILL_MODE else "latest"
     partitions = [
-        TopicPartition(KAFKA.topic_charging_events, p, OFFSET_END)
+        TopicPartition(KAFKA.topic_charging_events, p, offset)
         for p in meta.topics[KAFKA.topic_charging_events].partitions
     ]
     consumer.assign(partitions)
-    log.info("Assigned %d partitions (from latest) for topic %s", len(partitions), KAFKA.topic_charging_events)
+    log.info("Assigned %d partitions (from %s) for topic %s", len(partitions), offset_label, KAFKA.topic_charging_events)
 
     writer      = BatchWriter()
     dead_letter = DeadLetterWriter()
@@ -269,6 +276,7 @@ def run(
     total   = 0
     t_start = time.monotonic()
     t_report = t_start
+    t_last_msg = t_start
 
     try:
         while not shutdown:
@@ -277,7 +285,13 @@ def run(
             except KeyboardInterrupt:
                 break
             if not msgs:
+                writer.flush()
+                if _BACKFILL_MODE and (time.monotonic() - t_last_msg) >= _BACKFILL_IDLE_EXIT_S:
+                    log.info("Backfill complete — no new messages for %ds, exiting.", _BACKFILL_IDLE_EXIT_S)
+                    break
                 continue
+
+            t_last_msg = time.monotonic()
 
             for m in msgs:
                 if m.error():

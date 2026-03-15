@@ -12,7 +12,8 @@
   "schemaVersion": 38,
   "version": 2,
   "refresh": "1m",
-  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "utc",
+  "time": { "from": "now-2d", "to": "now" },
   "tags": ["chargesquare", "ev", "charging"],
   "panels": [
 
@@ -146,7 +147,7 @@
       "gridPos": { "x": 12, "y": 22, "w": 12, "h": 9 },
       "targets": [{
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "chargesquare-clickhouse" },
-        "rawSql": "SELECT fault_code AS \"Error Code\", count() AS Occurrences, round(count() * 100.0 / sum(count()) OVER (), 1) AS \"% of Faults\" FROM chargesquare.charging_events WHERE event_type = 'fault_alert' AND $__timeFilter(timestamp) GROUP BY fault_code ORDER BY Occurrences DESC LIMIT 10",
+        "rawSql": "SELECT error_code AS \"Error Code\", count() AS Occurrences, round(count() * 100.0 / sum(count()) OVER (), 1) AS \"% of Faults\" FROM chargesquare.charging_events WHERE event_type = 'fault_alert' AND $__timeFilter(timestamp) GROUP BY error_code ORDER BY Occurrences DESC LIMIT 10",
         "refId": "A"
       }],
       "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [{ "matcher": { "id": "byName", "options": "% of Faults" }, "properties": [{ "id": "unit", "value": "percent" }] }] }

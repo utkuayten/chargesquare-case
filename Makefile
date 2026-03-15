@@ -1,5 +1,5 @@
 .PHONY: help build up down logs status producer producer-fast producer-max \
-        consumer-redis consumer-ch consumer-ch-backfill pipeline dashboard report benchmark backfill backfill-full test
+        consumer-redis consumer-ch consumer-ch-backfill pipeline dashboard report benchmark backfill backfill-full test clean
 
 RUN = docker-compose run --rm app
 
@@ -107,3 +107,9 @@ backfill-full:
 # ─────────────────────────────────────────────────────────
 test:
 	$(RUN) python -m pytest tests/ -v --tb=short
+
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
+	find . -name "*.pyc" -delete 2>/dev/null; \
+	rm -f dead_letter.jsonl
+	@echo "Cleaned."
