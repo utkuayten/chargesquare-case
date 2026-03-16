@@ -73,7 +73,7 @@ from config.settings import CLICKHOUSE, KAFKA
 
 # Backfill mode: watermark disabled means we read from beginning and auto-exit when idle
 _BACKFILL_MODE = int(os.environ.get("WATERMARK_MAX_LATENESS_S", "300")) >= 999999
-_BACKFILL_IDLE_EXIT_S = 10  # exit after this many seconds of no messages in backfill mode
+_BACKFILL_IDLE_EXIT_S = 30  # exit after this many seconds of no messages *once data has started flowing*
 from consumers.validator import DeadLetterWriter, validate
 from consumers.deduplicator import Deduplicator
 from consumers.watermark import Watermark
@@ -279,7 +279,7 @@ def run(
     total      = 0
     t_start    = time.monotonic()
     t_report   = t_start
-    t_last_msg = t_start
+    t_last_msg = None   # None until first message arrives — avoids premature idle-exit
     t_last_flush = t_start
 
     try:
@@ -291,14 +291,14 @@ def run(
                 break
             if not msgs:
                 writer.flush()
-                if _BACKFILL_MODE and (time.monotonic() - t_last_msg) >= _BACKFILL_IDLE_EXIT_S:
+                if _BACKFILL_MODE and t_last_msg is not None and (time.monotonic() - t_last_msg) >= _BACKFILL_IDLE_EXIT_S:
                     log.info("Backfill complete — no new messages for %ds, exiting.", _BACKFILL_IDLE_EXIT_S)
                     break
                 if shutdown:
                     break
                 continue
 
-            t_last_msg = time.monotonic()
+            t_last_msg = time.monotonic()  # start idle timer only after first batch
 
             for m in msgs:
                 if shutdown:

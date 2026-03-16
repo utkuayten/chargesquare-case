@@ -176,6 +176,14 @@ In Grafana, set the time picker to **Yesterday**, **Last 7 days**, etc. — back
 | `make report` | Print a full one-shot analytics report to the terminal |
 | `make dashboard` | Live terminal dashboard, refreshes every 30s |
 
+### Export
+
+| Command | Description |
+|---------|-------------|
+| `make export-parquet` | Export all events → `exports/charging_events.parquet` (Snappy, 200k row batches) |
+| `--date YYYY-MM-DD` | Filter to a single day |
+| `--out path/to/file` | Custom output path |
+
 ### Testing & Benchmarking
 
 | Command | Description |
