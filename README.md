@@ -1,6 +1,6 @@
 # ChargeSquare — EV Charging Data Pipeline
 
-A real-time event streaming and analytics pipeline built for a data engineering case study. It simulates a network of 1,000 EV charging stations across Europe, processes up to 100,000 events/sec through Kafka, and stores data in both Redis (real-time state) and ClickHouse (analytics). Comes with a live terminal dashboard, a Grafana UI, and a full analytics report.
+A real-time event streaming and analytics pipeline simulating 1,000 EV charging stations across Europe. Events flow at up to 100,000/sec through Kafka into Redis (real-time state) and ClickHouse (analytics). Includes realistic traffic shaping — morning, lunch, and evening peaks — a live terminal dashboard, Grafana UI, and a full analytics report. Supports both live simulation and historical backfill for any number of days.
 
 ---
 
@@ -97,7 +97,7 @@ Or open Grafana at http://localhost:3000 — set the time picker to **Last 1 hou
 
 ## Mode 2 — Backfill (Historical Data)
 
-Injects 24 hours of yesterday's events so all time buckets (Morning Peak, Evening Peak, Off-Peak) appear in reports and Grafana. The ClickHouse consumer must run with the watermark disabled to accept old timestamps.
+Generates historical events with correct timestamps so all time buckets (Morning Peak, Lunch Peak, Evening Peak, Off-Peak) appear in reports and Grafana. The ClickHouse consumer runs with the watermark disabled to accept old timestamps.
 
 **Terminal 1 — Redis consumer**
 ```bash
@@ -111,14 +111,29 @@ make consumer-ch-backfill
 
 **Terminal 3 — Backfill** (start after both consumers show `Assigned 12 partitions`)
 ```bash
-make backfill
+make backfill        # yesterday only (1 day)
+make backfill-7d     # last 7 days
+make backfill-30d    # last 30 days
+```
+
+You can also run it directly with any duration or volume:
+```bash
+docker-compose run --rm app python scripts/backfill.py --days 14 --events-per-hour 200000
+```
+
+Want to tweak the simulation? Override any parameter via environment variables:
+```bash
+docker-compose run --rm \
+  -e SIM_FAULT_RATE_PCT=2.0 \
+  -e SIM_PEAK_MULT=4.0 \
+  app python scripts/backfill.py --days 7
 ```
 
 **View results** (once consumers finish processing):
 ```bash
 make report
 ```
-In Grafana, set the time picker to **Yesterday** or **Last 2 days** — backfill data uses yesterday's timestamps.
+In Grafana, set the time picker to **Yesterday**, **Last 7 days**, etc. — backfill data uses real historical timestamps.
 
 ---
 
@@ -150,7 +165,9 @@ In Grafana, set the time picker to **Yesterday** or **Last 2 days** — backfill
 | `make producer` | Run simulator at 10,000 events/sec (4 workers) |
 | `make producer-fast` | Run simulator at 50,000 events/sec (8 workers) |
 | `make producer-max` | Run simulator at 100,000 events/sec (16 workers) |
-| `make backfill` | Inject 24h of historical data (yesterday's timestamps) — use with `consumer-ch-backfill` |
+| `make backfill` | Inject 1 day of historical data — use with `consumer-ch-backfill` |
+| `make backfill-7d` | Inject last 7 days of historical data |
+| `make backfill-30d` | Inject last 30 days of historical data |
 
 ### Analytics
 
@@ -272,6 +289,11 @@ All settings are in `config/settings.py` and can be overridden with environment 
 | `NUM_PRODUCERS` | `4` | Producer worker processes |
 | `CH_BATCH_SIZE` | `10000` | ClickHouse insert batch size |
 | `WATERMARK_MAX_LATENESS_S` | `300` | Late event tolerance in seconds (`999999` to disable for backfill) |
+| `SIM_FAULT_RATE_PCT` | `0.3` | % of events that are fault alerts |
+| `SIM_PEAK_MULT` | `3.0` | Session rate multiplier during peak hours |
+| `SIM_SESSION_FRAC` | `0.08` | Fraction of off-peak events that open a new session |
+| `SIM_NETWORKS` | `10` | Number of CPO networks |
+| `SIM_STATIONS_PER_NET` | `100` | Stations per network |
 
 ---
 

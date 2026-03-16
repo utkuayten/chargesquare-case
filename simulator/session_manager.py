@@ -54,9 +54,10 @@ class SessionManager:
     _VC_POPULATION = VEHICLE_CATALOG
     _VC_WEIGHTS    = [v["w"] for v in VEHICLE_CATALOG]
 
-    def __init__(self, registry, cfg: SimulatorConfig) -> None:
+    def __init__(self, registry, cfg: SimulatorConfig, clock_fn=None) -> None:
         self._registry = registry
         self._cfg      = cfg
+        self._clock_fn = clock_fn  # optional: callable() -> datetime (for backfill)
 
     # ── public API ────────────────────────────────────────────────────────────
 
@@ -86,13 +87,21 @@ class SessionManager:
     # ── peak-hour logic ───────────────────────────────────────────────────────
 
     def _peak_multiplier(self) -> float:
-        h = datetime.now(timezone.utc).hour
-        for start, end in self._cfg.peak_hours:
+        now = self._clock_fn() if self._clock_fn else datetime.now(timezone.utc)
+        h = now.hour
+        for window in self._cfg.peak_hours:
+            start, end = window[0], window[1]
+            mult = window[2] if len(window) > 2 else self._cfg.peak_multiplier
             if start <= h < end:
-                return self._cfg.peak_multiplier
+                return mult
         return 1.0
 
     # ── session lifecycle builder ─────────────────────────────────────────────
+
+    def _ts(self) -> str:
+        if self._clock_fn:
+            return self._clock_fn().isoformat()
+        return _now()
 
     def _session_lifecycle(self) -> List[ChargingEvent]:
         """
@@ -136,7 +145,7 @@ class SessionManager:
         # SESSION_START
         events.append(ChargingEvent(
             event_id=_new_id(), event_type=EventType.SESSION_START,
-            timestamp=_now(),
+            timestamp=self._ts(),
             power_kw=pwr, energy_kwh=0.0,
             soc_percent=soc_start, duration_minutes=0,
             revenue_eur=0.0, status=StationStatus.CHARGING,
@@ -150,7 +159,7 @@ class SessionManager:
             dur_now     = int(duration * i / n_updates)
             events.append(ChargingEvent(
                 event_id=_new_id(), event_type=EventType.METER_UPDATE,
-                timestamp=_now(),
+                timestamp=self._ts(),
                 power_kw=pwr, energy_kwh=cumulative,
                 soc_percent=min(100, soc_now), duration_minutes=dur_now,
                 revenue_eur=round(cumulative * price, 2),
@@ -163,7 +172,7 @@ class SessionManager:
         total_energy = round(energy_step * n_updates, 2)
         events.append(ChargingEvent(
             event_id=_new_id(), event_type=EventType.SESSION_STOP,
-            timestamp=_now(),
+            timestamp=self._ts(),
             power_kw=0.0, energy_kwh=total_energy,
             soc_percent=min(100, soc_end), duration_minutes=duration,
             revenue_eur=round(total_energy * price, 2),
@@ -192,7 +201,7 @@ class SessionManager:
         st, cid = self._station_sample_simple()
         return ChargingEvent(
             event_id=_new_id(), event_type=EventType.FAULT_ALERT,
-            timestamp=_now(),
+            timestamp=self._ts(),
             station_id=st["station_id"], connector_id=cid,
             session_id="", network_id=st["network_id"],
             city=st["city"], country=st["country"],
@@ -210,7 +219,7 @@ class SessionManager:
         st, cid = self._station_sample_simple()
         return ChargingEvent(
             event_id=_new_id(), event_type=EventType.HEARTBEAT,
-            timestamp=_now(),
+            timestamp=self._ts(),
             station_id=st["station_id"], connector_id=cid,
             session_id="", network_id=st["network_id"],
             city=st["city"], country=st["country"],
@@ -230,7 +239,7 @@ class SessionManager:
         ])
         return ChargingEvent(
             event_id=_new_id(), event_type=EventType.STATUS_CHANGE,
-            timestamp=_now(),
+            timestamp=self._ts(),
             station_id=st["station_id"], connector_id=cid,
             session_id="", network_id=st["network_id"],
             city=st["city"], country=st["country"],

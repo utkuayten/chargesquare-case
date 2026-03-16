@@ -26,10 +26,11 @@ simulator:
 
   # ── Traffic shaping ───────────────────────────────────────────────────────
   traffic:
-    peak_hours:                     # UTC hour ranges with elevated session rate
-      - [7,  9]                     # morning rush
-      - [17, 20]                    # evening rush
-    peak_multiplier:  3.0           # session-start rate is 3× during peak hours
+    peak_hours:                     # UTC hour ranges with [start, end, multiplier]
+      - [7,  9,  2.0]               # morning rush   — 2×
+      - [12, 14, 1.5]               # lunch peak     — 1.5×
+      - [17, 20, 3.0]               # evening rush   — 3×
+    peak_multiplier:  3.0           # fallback (used if entry has no multiplier)
     session_fraction: 0.08          # fraction of off-peak events that open a new session
                                     # (each session generates ~10 events, so ~0.8 % of
                                     #  raw events trigger a full lifecycle)

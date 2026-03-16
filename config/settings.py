@@ -118,8 +118,8 @@ class SimulatorConfig:
         _y("session", "soc_end_pct") or [60, 100]))
 
     # ── Traffic shaping ───────────────────────────────────────────────────────
-    peak_hours: List[Tuple[int, int]] = field(default_factory=lambda: [
-        tuple(h) for h in (_y("traffic", "peak_hours") or [[7, 9], [17, 20]])])
+    peak_hours: List[Tuple] = field(default_factory=lambda: [
+        tuple(h) for h in (_y("traffic", "peak_hours") or [[7, 9, 2.0], [12, 14, 1.5], [17, 20, 3.0]])])
     peak_multiplier:  float = float(os.getenv(
         "SIM_PEAK_MULT", str(_y("traffic", "peak_multiplier", default=3.0))))
     session_fraction: float = float(os.getenv(

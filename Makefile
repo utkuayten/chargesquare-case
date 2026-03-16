@@ -1,5 +1,5 @@
 .PHONY: help build up down logs status producer producer-fast producer-max \
-        consumer-redis consumer-ch consumer-ch-backfill pipeline dashboard report benchmark backfill backfill-full export-parquet test clean
+        consumer-redis consumer-ch consumer-ch-backfill pipeline dashboard report benchmark backfill backfill-7d backfill-30d backfill-full export-parquet test clean
 
 RUN = docker-compose run --rm app
 
@@ -30,7 +30,9 @@ help:
 	@echo "    make dashboard       Live terminal dashboard (refreshes every 30s)"
 	@echo "    make report          Print a one-shot analytics report"
 	@echo "    make benchmark       Run throughput benchmark"
-	@echo "    make backfill        Inject 24 h of historical data (all time periods)"
+	@echo "    make backfill        Inject yesterday's 24 h of data"
+	@echo "    make backfill-7d     Inject last 7 days of data"
+	@echo "    make backfill-30d    Inject last 30 days of data"
 	@echo "    make export-parquet  Export all events from ClickHouse to Parquet"
 	@echo ""
 	@echo "  Dev"
@@ -90,7 +92,13 @@ benchmark:
 	$(RUN) python scripts/benchmark.py
 
 backfill:
-	$(RUN) python scripts/backfill.py
+	$(RUN) python scripts/backfill.py --days 1
+
+backfill-7d:
+	$(RUN) python scripts/backfill.py --days 7
+
+backfill-30d:
+	$(RUN) python scripts/backfill.py --days 30
 
 backfill-direct:
 	$(RUN) python scripts/backfill_direct.py
