@@ -190,6 +190,7 @@ In Grafana, set the time picker to **Yesterday**, **Last 7 days**, etc. — back
 |---------|-------------|
 | `make test` | Run all 25 unit tests inside Docker |
 | `make benchmark` | Measure generator + Kafka throughput |
+| `make bench-redis` | Benchmark Redis consumer at 1k/10k/100k eps → `exports/redis_benchmark.pdf` |
 | `python scripts/scale_test.py` | Incremental scale test: 1k → 10k → 50k → 100k eps |
 
 ### Reset

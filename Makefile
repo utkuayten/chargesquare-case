@@ -1,5 +1,5 @@
 .PHONY: help build up down logs status producer producer-fast producer-max \
-        consumer-redis consumer-ch consumer-ch-backfill pipeline dashboard report benchmark backfill backfill-7d backfill-30d backfill-full export-parquet test clean
+        consumer-redis consumer-ch consumer-ch-backfill pipeline dashboard report benchmark backfill backfill-7d backfill-30d backfill-full export-parquet pdf-report bench-redis test clean
 
 RUN = docker-compose run --rm app
 
@@ -34,6 +34,8 @@ help:
 	@echo "    make backfill-7d     Inject last 7 days of data"
 	@echo "    make backfill-30d    Inject last 30 days of data"
 	@echo "    make export-parquet  Export all events from ClickHouse to Parquet"
+	@echo "    make pdf-report      Generate PDF analytics report → exports/chargesquare_report.pdf"
+	@echo "    make bench-redis     Benchmark Redis consumer at 1k/10k/100k eps → exports/redis_benchmark.pdf"
 	@echo ""
 	@echo "  Dev"
 	@echo "    make test            Run unit tests"
@@ -115,6 +117,12 @@ backfill-full:
 
 export-parquet:
 	$(RUN) python scripts/export_parquet.py
+
+pdf-report:
+	$(RUN) python scripts/generate_report.py
+
+bench-redis:
+	$(RUN) python scripts/bench_redis.py
 
 # ─────────────────────────────────────────────────────────
 test:

@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
 import time
 from datetime import datetime, timezone
@@ -124,10 +125,23 @@ class RedisWriter:
     def _route(self, ev: dict, today: str, p: redis.client.Pipeline) -> None:
         et = ev.get("event_type", "")
 
-        # Heartbeat: only global counters, no session/station state to update
+        # Heartbeat: counters only — no station/session state to update
         if et == "heartbeat":
             p.incr("global:events:total")
             p.incr("global:events:heartbeat")
+            return
+
+        # status_change: skip the per-status incr (low value at high volume)
+        # and batch the hset into fewer fields to reduce pipeline commands
+        if et == "status_change":
+            stid = ev.get("station_id", "")
+            p.hset(f"station:{stid}:status", mapping={
+                "status":       ev.get("status", "unknown"),
+                "last_updated": ev.get("timestamp", ""),
+            })
+            p.expire(f"station:{stid}:status", REDIS.station_ttl_seconds)
+            p.incr("global:events:total")
+            p.incr("global:events:status_change")
             return
 
         handler = self._handlers.get(et)
@@ -272,8 +286,8 @@ def run(
         "auto.offset.reset":      "latest",
         "enable.auto.commit":     True,
         "auto.commit.interval.ms":5000,
-        "fetch.min.bytes":        65_536,   # wait for 64 KB before fetching — fewer round-trips
-        "fetch.wait.max.ms":      500,
+        "fetch.min.bytes":        int(os.getenv("KAFKA_FETCH_MIN_BYTES",    "65536")),
+        "fetch.wait.max.ms":      int(os.getenv("KAFKA_FETCH_WAIT_MAX_MS", "500")),
         "max.poll.interval.ms":   300_000,
         "queued.max.messages.kbytes": 131_072,  # 128 MB prefetch buffer
     })
