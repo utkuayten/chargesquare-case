@@ -50,33 +50,18 @@ SPEEDS = [
         "eps":     1_000,
         "workers": 1,
         "color":   "#3fb950",
-        # no extra consumers or tuning needed at low load
-        "extra_consumers": 0,
-        "consumer_env":    {},
     },
     {
         "label":   "10k eps",
         "eps":     10_000,
         "workers": 4,
         "color":   "#58a6ff",
-        "extra_consumers": 0,
-        "consumer_env":    {},
     },
     {
         "label":   "100k eps",
         "eps":     100_000,
         "workers": 16,
         "color":   "#f85149",
-        # Fixes applied only for 100k:
-        #   • 2 extra consumer processes  → 3 total, each owns 4 of 12 partitions
-        #   • larger batch (20k)          → fewer pipeline round-trips
-        #   • faster fetch                → no 500 ms wait at burst start
-        "extra_consumers": 2,
-        "consumer_env": {
-            "KAFKA_CONSUMER_BATCH":    "30000",   # fewer pipeline flushes
-            "KAFKA_FETCH_MIN_BYTES":   "1",       # fetch immediately
-            "KAFKA_FETCH_WAIT_MAX_MS": "10",      # don't buffer at all
-        },
     },
 ]
 
@@ -164,9 +149,7 @@ def _build_table(
     target_eps = speed_cfg["eps"]
     pct_of_target = (cur_eps / target_eps * 100) if target_eps else 0
 
-    n_consumers = 1 + speed_cfg.get("extra_consumers", 0)
     t.add_row("Target",         f"{target_eps:>12,} eps")
-    t.add_row("Consumers",      f"{n_consumers:>12}  process(es)")
     t.add_row("Current eps",    f"[bold]{cur_eps:>12,.0f}[/bold]")
     t.add_row("Avg eps",        f"{avg_eps:>12,.0f}")
     t.add_row("Peak eps",       f"{peak_eps:>12,.0f}")
@@ -198,53 +181,17 @@ def _build_table(
 # Single speed test
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _start_extra_consumers(n: int, env_overrides: Dict) -> List[subprocess.Popen]:
-    """Spawn n additional Redis consumer processes with custom env vars."""
-    procs = []
-    env = {**os.environ, **env_overrides}
-    for i in range(n):
-        p = subprocess.Popen(
-            [sys.executable, "-m", "consumers.redis_consumer"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=env,
-        )
-        procs.append(p)
-        console.print(f"  [dim]Extra consumer {i+1}/{n} started (pid {p.pid})[/dim]")
-    return procs
-
-
-def _stop_procs(procs: List[subprocess.Popen]) -> None:
-    for p in procs:
-        p.terminate()
-    for p in procs:
-        try:
-            p.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            p.kill()
-
-
 def run_speed(
     r: redis.Redis,
     speed_cfg: Dict,
     duration: float,
     warmup: float,
 ) -> Dict:
-    label           = speed_cfg["label"]
-    eps             = speed_cfg["eps"]
-    workers         = speed_cfg["workers"]
-    n_extra         = speed_cfg.get("extra_consumers", 0)
-    consumer_env    = speed_cfg.get("consumer_env", {})
+    label   = speed_cfg["label"]
+    eps     = speed_cfg["eps"]
+    workers = speed_cfg["workers"]
 
     console.rule(f"[bold]Starting {label}  ({workers} worker(s))[/bold]")
-
-    # spin up extra consumers for this speed only
-    extra_procs: List[subprocess.Popen] = []
-    if n_extra > 0:
-        console.print(f"  [yellow]Spawning {n_extra} extra Redis consumers "
-                      f"with optimised settings…[/yellow]")
-        extra_procs = _start_extra_consumers(n_extra, consumer_env)
-        time.sleep(8)   # Kafka rebalance needs 5-8s for 3-consumer group
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "simulator.producer",
@@ -292,10 +239,6 @@ def run_speed(
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
-
-        if extra_procs:
-            console.print(f"  [dim]Stopping {len(extra_procs)} extra consumers…[/dim]")
-            _stop_procs(extra_procs)
 
     total_delivered = snap_after["total"] - snap_before["total"]
     event_totals    = {k: snap_after[k] - snap_before[k] for k in EVENT_KEYS}
@@ -512,20 +455,18 @@ def _save_pdf(results: List[Dict], out_path: str) -> None:
              "executes with low latency. The 2.7% gap is normal scheduling jitter "
              "and Kafka commit overhead — not a bottleneck."),
 
-            (ORANGE, "100k eps — 32.5% efficiency  (avg 32,500 / target 100,000)",
-             "Three bottlenecks compound at this scale:\n\n"
-             "  1. Python GIL  —  Even with 3 consumer processes (one per 4 partitions), "
-             "each process is single-threaded. Building a 30,000-event pipeline in Python "
-             "— routing, hset field construction, expire calls — consumes the entire CPU "
-             "budget of one core before the pipeline even reaches Redis.\n\n"
+            (ORANGE, "100k eps — single-consumer ceiling",
+             "Two bottlenecks compound at this scale:\n\n"
+             "  1. Python GIL  —  A single Python process is single-threaded. "
+             "Building large Redis pipelines in Python — routing, hset field construction, "
+             "expire calls — consumes the entire CPU budget of one core before the "
+             "pipeline even reaches Redis.\n\n"
              "  2. Event-type mix  —  At 100k eps, status_change and heartbeat make up "
-             "~90% of events. status_change alone generates 3 Redis pipeline commands per "
-             "event (hset 5 fields + expire + incr). At 32k status_changes/sec that is "
-             "~96k Redis commands per second built entirely in Python memory.\n\n"
-             "  3. Kafka consumer group rebalance lag  —  When 2 extra consumers join, "
-             "Kafka suspends all consumption for 5–8 s during partition reassignment. "
-             "This dead time at the start of the test drags the 20-second average down "
-             "significantly even though the peak reaches ~84k eps once stable."),
+             "~90% of events. status_change alone generates 4 Redis pipeline commands per "
+             "event (hset + expire + 2 incr). At 32k status_changes/sec that is "
+             "~128k Redis commands/sec to build entirely in Python memory.\n\n"
+             "The peak eps reached during stable windows shows the infrastructure "
+             "(Kafka + Redis) is not the bottleneck — Python CPU is the ceiling."),
 
             (RED,    "Ceiling & path to true 100k eps",
              "The ~84k peak shows the infrastructure (Kafka + Redis) is not the limit — "
